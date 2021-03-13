@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<menu-config xmlns="http://schemas.haulmont.com/cuba/menu.xsd">
+    <menu id="application-signalbox" insertBefore="administration">
+        <item screen="signalbox_Generator.browse"/>
+        <item screen="signalbox_FxPrice.browse"/>
+        <item screen="signalbox_MarkovLab.browse"/>
+        <item screen="signalbox_EplQuery"/>
+    </menu>
+</menu-config>

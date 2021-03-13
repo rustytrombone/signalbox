@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<persistence xmlns="http://java.sun.com/xml/ns/persistence" version="2.0">
+    <persistence-unit name="signalbox" transaction-type="RESOURCE_LOCAL">
+
+        <class>com.company.signalbox.entity.data.Item</class>
+        <class>com.company.signalbox.entity.data.FxPrice</class>
+        <class>com.company.signalbox.entity.signals.Generator</class>
+        <class>com.company.signalbox.entity.signals.Signal</class>
+        <class>com.company.signalbox.entity.labs.MarkovLab</class>
+        <class>com.company.signalbox.entity.data.FxPriceTS</class>
+        <class>com.company.signalbox.entity.data.FxPriceDC</class>
+    </persistence-unit>
+</persistence>

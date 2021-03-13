@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<window xmlns="http://schemas.haulmont.com/cuba/screen/window.xsd"
+        caption="msg://caption"
+        messagesPack="com.company.signalbox.web.screens.generator">
+    <data>
+        <collection id="fxPricesDc" class="com.company.signalbox.entity.data.FxPrice">
+            <view extends="_local"/>
+            <loader id="fxPricesDl">
+                <query>
+                    <![CDATA[select e from signalbox_FxPrice e]]>
+                </query>
+            </loader>
+        </collection>
+    </data>
+    <layout>
+        <split orientation="vertical" height="100%" width="100%">
+            <vbox spacing="true" expand="eplQuery" height="100%">
+                <sourceCodeEditor id="eplQuery" width="100%" showGutter="false" mode="SQL"/>
+                <button id="btnExecute" caption="Execute" invoke="onBtnExecuteClick"/>
+            </vbox>
+            <table height="100%" width="100%" dataContainer="fxPricesDc">
+                <columns>
+                    <column id="ticker"/>
+                    <column id="instant"/>
+                    <column id="val"/>
+                </columns>
+            </table>
+        </split>
+
+    </layout>
+</window>

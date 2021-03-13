@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<views xmlns="http://schemas.haulmont.com/cuba/view.xsd">
+
+    <view entity="signalbox_Signal" name="signal-view" extends="_local">
+        <property name="generator" view="_minimal"/>
+    </view>
+    <view entity="signalbox_Generator" name="generator-view" extends="_local" systemProperties="true">
+        <property name="signals" view="_minimal">
+            <property name="value"/>
+        </property>
+    </view>
+</views>
