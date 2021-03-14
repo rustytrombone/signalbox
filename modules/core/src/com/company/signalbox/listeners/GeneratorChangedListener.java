@@ -18,6 +18,6 @@ public class GeneratorChangedListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void afterCommit(EntityChangedEvent<Generator, UUID> event) {
-        sigGenService.reloadStatements();
+        sigGenService.reloadStatements(event.getEntityId().getValue());
     }
 }

@@ -19,6 +19,7 @@ import com.espertech.esper.runtime.client.EPRuntime
 import com.espertech.esper.runtime.client.EPRuntimeProvider
 import com.espertech.esper.runtime.client.EPStatement
 import com.espertech.esper.runtime.client.UpdateListener
+import com.haulmont.cuba.core.entity.Entity
 import com.haulmont.cuba.core.global.DataManager
 import com.haulmont.cuba.core.global.Metadata
 import com.haulmont.cuba.core.global.TimeSource
@@ -63,9 +64,13 @@ public class SigGenServiceBean implements SigGenService {
     }
 
     @Override
-    public void reloadStatements() {
-        init();
+    public void sendEntityEvent(Entity entity, String eventName) {
+        runtime.getEventService().sendEventBean(entity, eventName);
+    }
 
+    @Override
+    public void reloadStatements() {
+        reloadStatements(null)
         def gens = dataManager.load(Generator.class).view('generator-view').list()
 
         gens.each { gen ->
@@ -76,7 +81,7 @@ public class SigGenServiceBean implements SigGenService {
                 log.info("Generator {} removed", gen.name)
             }
 
-            if (gen.status.equals(GeneratorStatus.ENABLED) && !loadedGenStatements.keySet().contains(gen)) {
+            if ((gen.status.equals(GeneratorStatus.ENABLED) && !loadedGenStatements.keySet().contains(gen))) {
                 def deployment = compileAndDeploy(gen)
                 loadedGenStatements.put(gen, deployment)
                 log.info("Generator {} added", gen.name)
@@ -84,11 +89,33 @@ public class SigGenServiceBean implements SigGenService {
         }
 
         lastReloadedGens = timeSource.currentTimeMillis()
+    }
+
+    @Override
+    public void reloadStatements(UUID id) {
+        init();
+        def gen = loadedGenStatements.keySet().find { it.id.equals(id)}
+
+        if (gen) {
+            runtime.getDeploymentService().undeploy(loadedGenStatements[gen].deploymentId)
+            loadedGenStatements.remove(gen)
+            def newGen = dataManager.load(Generator.class).id(id).view('generator-view').one()
+            def deployment = compileAndDeploy(newGen)
+            loadedGenStatements.put(gen, deployment)
+
+            log.info("Reloaded statement {}", newGen.name)
+        }
 
         // 1. Load all statements which are inactive, if any of them exist in active statements list, shut them down and remove them
         // 2. All that are active but not in list, add them
         // 3. Any which are updated since last ran, remove from list and re-load
         // 4. Any which cause errors when loading, update status to errored and save
+    }
+
+    @Override
+    void checkCompilation(String query) {
+        def args = new CompilerArguments(configuration);
+        EPCompilerProvider.getCompiler().compile(query, args);
     }
 
     EPDeployment compileAndDeploy(Generator generator) {
