@@ -1,5 +1,7 @@
 package com.company.signalbox.service
 
+import com.company.signalbox.MarkovWindowForge
+import com.company.signalbox.entity.data.EplResultItem
 import com.company.signalbox.entity.data.FxPrice
 import com.company.signalbox.entity.signals.GenHandler
 import com.company.signalbox.entity.signals.Generator
@@ -8,10 +10,21 @@ import com.espertech.esper.common.client.EPCompiled
 import com.espertech.esper.common.client.EventBean
 import com.espertech.esper.common.client.configuration.Configuration
 import com.espertech.esper.common.client.fireandforget.EPFireAndForgetQueryResult
+import com.espertech.esper.common.client.module.Module
+import com.espertech.esper.common.client.util.EventTypeBusModifier
+import com.espertech.esper.common.client.util.NameAccessModifier
 import com.espertech.esper.compiler.client.CompilerArguments
 import com.espertech.esper.compiler.client.EPCompileException
 import com.espertech.esper.compiler.client.EPCompiler
 import com.espertech.esper.compiler.client.EPCompilerProvider
+import com.espertech.esper.compiler.client.option.AccessModifierContextOption
+import com.espertech.esper.compiler.client.option.AccessModifierEventTypeContext
+import com.espertech.esper.compiler.client.option.AccessModifierEventTypeOption
+import com.espertech.esper.compiler.client.option.AccessModifierNamedWindowContext
+import com.espertech.esper.compiler.client.option.AccessModifierNamedWindowOption
+import com.espertech.esper.compiler.client.option.BusModifierEventTypeContext
+import com.espertech.esper.compiler.client.option.BusModifierEventTypeOption
+import com.espertech.esper.runtime.client.DeploymentOptions
 import com.espertech.esper.runtime.client.EPDeployException
 import com.espertech.esper.runtime.client.EPDeployment
 import com.espertech.esper.runtime.client.EPFireAndForgetService
@@ -34,10 +47,11 @@ public class SigGenServiceBean implements SigGenService {
 
     private Logger log = LoggerFactory.getLogger(getClass())
 
-    private boolean isStarted = false;
-    private EPCompiler compiler
-    private EPRuntime runtime
-    private Configuration configuration
+    protected boolean isStarted = false;
+    protected EPCompiler compiler
+    protected EPRuntime runtime
+    protected Configuration configuration
+    protected CompilerArguments compilerArguments
 
     @Inject
     protected Metadata metadata
@@ -51,6 +65,11 @@ public class SigGenServiceBean implements SigGenService {
     protected DataManager dataManager
 
     private Map<Generator, EPDeployment> loadedGenStatements = new HashMap<>()
+    private Map<Generator, EPCompiled> genCompilations = new HashMap<>()
+
+    // Model / labe process
+    // Create data structure that is based on event type, with start probabilities, transition probs and emmission probs
+    // For each defined model, add a virtual data window and name it
 
     @Override
     public void sendTestMessage() {
@@ -89,6 +108,7 @@ public class SigGenServiceBean implements SigGenService {
         }
 
         lastReloadedGens = timeSource.currentTimeMillis()
+
     }
 
     @Override
@@ -96,7 +116,7 @@ public class SigGenServiceBean implements SigGenService {
         init();
         def gen = loadedGenStatements.keySet().find { it.id.equals(id)}
 
-        if (gen) {
+        if (gen && loadedGenStatements.containsKey(gen)) {
             runtime.getDeploymentService().undeploy(loadedGenStatements[gen].deploymentId)
             loadedGenStatements.remove(gen)
             def newGen = dataManager.load(Generator.class).id(id).view('generator-view').one()
@@ -114,17 +134,45 @@ public class SigGenServiceBean implements SigGenService {
 
     @Override
     void checkCompilation(String query) {
-        def args = new CompilerArguments(configuration);
-        EPCompilerProvider.getCompiler().compile(query, args);
+        return
+        EPCompilerProvider.getCompiler().compile(query, new CompilerArguments()); // TODO this doesn't work because it won't compile named windows which already exists
     }
 
     EPDeployment compileAndDeploy(Generator generator) {
+        init()
+
         try {
 
-            def args = new CompilerArguments(configuration);
-            def epCompiled = EPCompilerProvider.getCompiler().compile(generator.query, args);
+            def args = new CompilerArguments();
+
+            args.getOptions().setAccessModifierEventType( new AccessModifierEventTypeOption() {
+                @Override
+                NameAccessModifier getValue(AccessModifierEventTypeContext env) {
+                    NameAccessModifier.PUBLIC
+                }
+            })
+
+
+            args.getOptions().setAccessModifierNamedWindow(new AccessModifierNamedWindowOption() {
+                @Override
+                NameAccessModifier getValue(AccessModifierNamedWindowContext env) {
+                    return NameAccessModifier.PUBLIC
+                }
+            });
+            args.getOptions().setBusModifierEventType(new BusModifierEventTypeOption() {
+                @Override
+                EventTypeBusModifier getValue(BusModifierEventTypeContext env) {
+                    return EventTypeBusModifier.BUS
+                }
+            });
+            args.setConfiguration(runtime.getConfigurationDeepCopy());
+
+
+            def epCompiled = compiler.compile(generator.query, args);
             def deployment = runtime.getDeploymentService().deploy(epCompiled);
             def statement = runtime.getDeploymentService().getStatement(deployment.getDeploymentId(), generator.name);
+
+            genCompilations[generator] = epCompiled
 
             statement.addListener(new UpdateListener() {
                 @Override
@@ -159,11 +207,15 @@ public class SigGenServiceBean implements SigGenService {
 
             configuration = new Configuration();
             configuration.getCommon().addEventType(FxPrice.class);
-            configuration.getCompiler().addPlugInSingleRowFunction('labVal', 'com.company.signalbox.service.SigGenServiceBean', 'getLabValue')
 
+            configuration.getCompiler().addPlugInSingleRowFunction('labVal', 'com.company.signalbox.service.SigGenServiceBean', 'getLabValue')
+            configuration.getCompiler().addPlugInVirtualDataWindow("ml", "markov", MarkovWindowForge.class.getName());
             compiler = EPCompilerProvider.getCompiler();
             runtime = EPRuntimeProvider.getDefaultRuntime(configuration);
 
+            compilerArguments = new CompilerArguments(configuration);
+
+            isStarted = true
 
         }
     }
@@ -173,12 +225,25 @@ public class SigGenServiceBean implements SigGenService {
     }
 
     @Override
-    public EPFireAndForgetQueryResult executeQuery(String query) {
-        def args = new CompilerArguments(configuration);
-        def epCompiled = EPCompilerProvider.getCompiler().compileQuery(query, args)
-        def output = runtime.fireAndForgetService.executeQuery(epCompiled)
+    public List<EplResultItem> executeQuery(String query) {
 
-        return output
+        init()
+        compilerArguments.getPath().add(runtime.getRuntimePath())
+        EPCompiled compiled = EPCompilerProvider.getCompiler().compileQuery(query, compilerArguments);
+
+        EPFireAndForgetQueryResult result = runtime.getFireAndForgetService().executeQuery(compiled);
+
+        def events = []
+        for (EventBean row : result.getArray()) {
+            def item = metadata.create(EplResultItem.class)
+            item.eventName = result.eventType.name
+            row.getProperties().each {
+                item.data = item.data + String.format("%s=%s,", it.key.toString(), it.value.toString())
+            }
+            events.add(item)
+        }
+
+        return events
     }
 
 }

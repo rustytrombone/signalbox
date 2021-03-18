@@ -3,11 +3,10 @@
         caption="msg://caption"
         messagesPack="com.company.signalbox.web.screens.generator">
     <data>
-        <collection id="fxPricesDc" class="com.company.signalbox.entity.data.FxPrice">
-            <view extends="_local"/>
-            <loader id="fxPricesDl">
+        <collection id="eplResultItemsDc" class="com.company.signalbox.entity.data.EplResultItem">
+            <loader id="eplResultItemsDl">
                 <query>
-                    <![CDATA[select e from signalbox_FxPrice e]]>
+                    <![CDATA[select e from signalbox_EplResultItem e ]]>
                 </query>
             </loader>
         </collection>
@@ -18,11 +17,10 @@
                 <sourceCodeEditor id="eplQuery" width="100%" showGutter="false" mode="SQL"/>
                 <button id="btnExecute" caption="Execute" invoke="onBtnExecuteClick"/>
             </vbox>
-            <table height="100%" width="100%" dataContainer="fxPricesDc">
+            <table height="100%" width="100%" dataContainer="eplResultItemsDc">
                 <columns>
-                    <column id="ticker"/>
-                    <column id="instant"/>
-                    <column id="val"/>
+                    <column id="eventName"/>
+                    <column id="data"/>
                 </columns>
             </table>
         </split>
