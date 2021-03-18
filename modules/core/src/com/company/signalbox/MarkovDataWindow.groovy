@@ -10,7 +10,7 @@ import com.espertech.esper.common.client.hook.vdw.VirtualDataWindowLookupContext
 class MarkovDataWindow  implements VirtualDataWindow {
     @Override
     VirtualDataWindowLookup getLookup(VirtualDataWindowLookupContext desc) {
-        return null
+        return new MarkovDataWindowLookup(context)
     }
 
     @Override
